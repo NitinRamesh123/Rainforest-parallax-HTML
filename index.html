@@ -1,0 +1,230 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rainforest Parallax Bird</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            border: 1px solid #333;
+            cursor: none;
+        }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">Move your mouse to guide the bird!</div>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Game variables
+        let mouseX = 400;
+        let mouseY = 300;
+        let bird = {
+            x: 400,
+            y: 300,
+            speed: 2,
+            frameIndex: 0,
+            animTimer: 0,
+            animSpeed: 0.15,
+            width: 32,
+            height: 32
+        };
+        
+        // Images
+        const images = {};
+        const birdFrames = [];
+        let imagesLoaded = 0;
+        let totalImages = 7; // 3 background layers + 4 bird frames
+        
+        // Raindrops
+        const raindrops = [];
+        const NUM_RAINDROPS = 100;
+        
+        // Initialize raindrops
+        for (let i = 0; i < NUM_RAINDROPS; i++) {
+            raindrops.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                speed: Math.random() * 4 + 4
+            });
+        }
+        
+        // Background layers
+        const backgroundLayers = [];
+        
+        function loadImage(src, callback) {
+            const img = new Image();
+            img.onload = () => {
+                imagesLoaded++;
+                callback(img);
+                if (imagesLoaded === totalImages) {
+                    gameLoop();
+                }
+            };
+            img.src = src;
+        }
+        
+        // Load all images
+        loadImage('far.png', (img) => {
+            backgroundLayers[0] = { image: img, factor: 0.2 };
+        });
+        
+        loadImage('mid.png', (img) => {
+            backgroundLayers[1] = { image: img, factor: 0.5 };
+        });
+        
+        loadImage('near.png', (img) => {
+            backgroundLayers[2] = { image: img, factor: 0.8 };
+        });
+        
+        for (let i = 0; i < 4; i++) {
+            loadImage(`bird_${i}.png`, (img) => {
+                birdFrames[i] = img;
+            });
+        }
+        
+        // Mouse tracking
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            mouseX = e.clientX - rect.left;
+            mouseY = e.clientY - rect.top;
+        });
+        
+        function updateBird() {
+            const targetX = mouseX - bird.width / 2;
+            const targetY = mouseY - bird.height / 2;
+            
+            const dx = targetX - bird.x;
+            const dy = targetY - bird.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            if (distance > bird.speed) {
+                bird.x += bird.speed * dx / distance;
+                bird.y += bird.speed * dy / distance;
+            } else {
+                bird.x = targetX;
+                bird.y = targetY;
+            }
+            
+            // Keep bird in bounds
+            bird.x = Math.max(0, Math.min(bird.x, canvas.width - bird.width));
+            bird.y = Math.max(0, Math.min(bird.y, canvas.height - bird.height));
+            
+            // Animate bird
+            bird.animTimer += bird.animSpeed;
+            if (bird.animTimer >= 1) {
+                bird.animTimer = 0;
+                bird.frameIndex = (bird.frameIndex + 1) % birdFrames.length;
+            }
+        }
+        
+        function updateRain() {
+            for (let drop of raindrops) {
+                drop.y += drop.speed;
+                if (drop.y > canvas.height) {
+                    drop.x = Math.random() * canvas.width;
+                    drop.y = Math.random() * -20;
+                    drop.speed = Math.random() * 4 + 4;
+                }
+            }
+        }
+        
+        function draw() {
+            // Clear canvas
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw background layers
+            for (let i = 0; i < backgroundLayers.length; i++) {
+                const layer = backgroundLayers[i];
+                if (!layer || !layer.image) continue;
+                
+                const maxOffsetX = Math.max(0, layer.image.width - canvas.width);
+                const maxOffsetY = Math.max(0, layer.image.height - canvas.height);
+                
+                let offsetX = 0;
+                let offsetY = 0;
+                
+                if (canvas.width - bird.width > 0) {
+                    offsetX = (bird.x / (canvas.width - bird.width)) * maxOffsetX;
+                }
+                if (canvas.height - bird.height > 0) {
+                    offsetY = (bird.y / (canvas.height - bird.height)) * maxOffsetY;
+                }
+                
+                if (i === 2) { // near.png layer - anchored to bottom
+                    ctx.drawImage(
+                        layer.image,
+                        -offsetX * layer.factor,
+                        canvas.height - layer.image.height
+                    );
+                } else {
+                    ctx.drawImage(
+                        layer.image,
+                        -offsetX * layer.factor,
+                        -offsetY * layer.factor
+                    );
+                }
+            }
+            
+            // Draw rain
+            ctx.strokeStyle = 'rgba(180, 220, 255, 0.8)';
+            ctx.lineWidth = 2;
+            for (let drop of raindrops) {
+                ctx.beginPath();
+                ctx.moveTo(drop.x, drop.y);
+                ctx.lineTo(drop.x, drop.y + 10);
+                ctx.stroke();
+            }
+            
+            // Draw bird
+            if (birdFrames[bird.frameIndex]) {
+                const birdImg = birdFrames[bird.frameIndex];
+                const dx = mouseX - bird.x;
+                
+                ctx.save();
+                ctx.translate(bird.x + bird.width / 2, bird.y + bird.height / 2);
+                if (dx < 0) {
+                    ctx.scale(-1, 1); // Flip horizontally
+                }
+                ctx.drawImage(birdImg, -bird.width / 2, -bird.height / 2, bird.width, bird.height);
+                ctx.restore();
+            }
+        }
+        
+        function gameLoop() {
+            updateBird();
+            updateRain();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Start loading message
+        ctx.fillStyle = 'white';
+        ctx.font = '20px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Loading...', canvas.width / 2, canvas.height / 2);
+    </script>
+</body>
+</html>
